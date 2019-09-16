@@ -1,7 +1,7 @@
-package com.hujy.service.impl;
+package com.hujy.mvc.service.impl;
 
 import com.hujy.annotation.MyService;
-import com.hujy.service.DemoService;
+import com.hujy.mvc.service.DemoService;
 
 @MyService
 public class DemoServiceImpl implements DemoService {

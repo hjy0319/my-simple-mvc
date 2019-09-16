@@ -39,7 +39,7 @@ public class MyDispatcherServlet extends HttpServlet {
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws IOException {
         try {
-            doDispatch(req, resp); //开始始匹配到对应的方方法
+            doDispatch(req, resp);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -51,7 +51,7 @@ public class MyDispatcherServlet extends HttpServlet {
         doLoadConfig(config.getInitParameter("contextConfigLocation"));
         //2、扫描相关的类
         doScanner(contextConfig.getProperty("scanPackage"));
-        //3、初始化扫描到的类，并且将它们放入到ICO 容器之中
+        //3、初始化扫描到的类，并且将它们放入到IOC 容器之中
         doInstance();
         //4、完成依赖注入
         doAutowired();
@@ -60,6 +60,14 @@ public class MyDispatcherServlet extends HttpServlet {
         System.out.println("**************** My Spring MVC has been initialized successfully *********************");
     }
 
+    /**
+     * 加载配置文件
+     *
+     * @param contextConfigLocation
+     * @return void
+     * @author hujy
+     * @date 2019-09-16 11:31
+     */
     private void doLoadConfig(String contextConfigLocation) {
         InputStream fis = null;
         try {
@@ -79,6 +87,14 @@ public class MyDispatcherServlet extends HttpServlet {
         }
     }
 
+    /**
+     * 扫描配置文件中指定的路径，将文件名以[包名].[文件名]的形式保存到集合中
+     *
+     * @param packageName
+     * @return void
+     * @author hujy
+     * @date 2019-09-16 11:33
+     */
     private void doScanner(String packageName) {
         //将所有的包路径转换为文件路径
         URL url = this.getClass().getClassLoader().getResource("/" + packageName.replaceAll("\\.", "/"));
@@ -93,6 +109,14 @@ public class MyDispatcherServlet extends HttpServlet {
         }
     }
 
+    /**
+     * 对象初始化，保存到IOC容器
+     *
+     * @param
+     * @return void
+     * @author hujy
+     * @date 2019-09-16 11:46
+     */
     private void doInstance() {
         if (classNames.size() == 0) {
             return;
@@ -103,24 +127,23 @@ public class MyDispatcherServlet extends HttpServlet {
                 Class<?> clazz = Class.forName(className);
                 if (clazz.isAnnotationPresent(MyController.class)) {
                     //默认将首字母小写作为beanName
-                    String beanName = lowerFirst(clazz.getSimpleName());
+                    String beanName = loweredFirstChar(clazz.getSimpleName());
                     ioc.put(beanName, clazz.newInstance());
                 } else if (clazz.isAnnotationPresent(MyService.class)) {
 
                     MyService service = clazz.getAnnotation(MyService.class);
                     String beanName = service.value();
-                    //如果用户设置了名字，就用用户自己设置
+                    //优先使用用户自定义的名字
                     if (!"".equals(beanName.trim())) {
                         ioc.put(beanName, clazz.newInstance());
                         continue;
                     }
 
-                    //如果自己没设，就按接口类型创建一个实例
+                    //如果没有自定义名字，就将接口类型作为bean的名字
                     Class<?>[] interfaces = clazz.getInterfaces();
                     for (Class<?> i : interfaces) {
                         ioc.put(i.getName(), clazz.newInstance());
                     }
-
                 } else {
                     continue;
                 }
@@ -131,17 +154,27 @@ public class MyDispatcherServlet extends HttpServlet {
     }
 
     /**
-     * 首字母小母
+     * 首字母转成小写
      *
      * @param str
-     * @return
+     * @return java.lang.String
+     * @author hujy
+     * @date 2019-09-16 14:08
      */
-    private String lowerFirst(String str) {
+    private String loweredFirstChar(String str) {
         char[] chars = str.toCharArray();
         chars[0] += 32;
         return String.valueOf(chars);
     }
 
+    /**
+     * 依赖注入
+     *
+     * @param
+     * @return void
+     * @author hujy
+     * @date 2019-09-16 14:13
+     */
     private void doAutowired() {
         if (ioc.isEmpty()) {
             return;
@@ -156,13 +189,16 @@ public class MyDispatcherServlet extends HttpServlet {
                     continue;
                 }
 
+                // 拿到autowired的属性名
                 MyAutowired autowired = field.getAnnotation(MyAutowired.class);
                 String beanName = autowired.value().trim();
                 if ("".equals(beanName)) {
                     beanName = field.getType().getName();
                 }
-                field.setAccessible(true); //设置私有属性的访问权限
+                // 设置私有属性的访问权限
+                field.setAccessible(true);
                 try {
+                    // 为属性注入实例，这里没有考虑循环依赖的复杂场景
                     field.set(entry.getValue(), ioc.get(beanName));
                 } catch (Exception e) {
                     e.printStackTrace();
@@ -172,6 +208,14 @@ public class MyDispatcherServlet extends HttpServlet {
         }
     }
 
+    /**
+     * 初始化url映射关系
+     *
+     * @param
+     * @return void
+     * @author hujy
+     * @date 2019-09-16 14:41
+     */
     private void initHandlerMapping() {
         if (ioc.isEmpty()) {
             return;
@@ -179,27 +223,28 @@ public class MyDispatcherServlet extends HttpServlet {
 
         for (Map.Entry<String, Object> entry : ioc.entrySet()) {
             Class<?> clazz = entry.getValue().getClass();
+            // 这里是对持有MyController的bean做处理
             if (!clazz.isAnnotationPresent(MyController.class)) {
                 continue;
             }
 
             String url = "";
-            //获取Controller的url配置
+            // 获取Controller的url配置
             if (clazz.isAnnotationPresent(MyRequestMapping.class)) {
                 MyRequestMapping requestMapping = clazz.getAnnotation(MyRequestMapping.class);
                 url = requestMapping.value();
             }
 
-            //获取Method的url配置
+            // 获取Method的url配置
             Method[] methods = clazz.getMethods();
             for (Method method : methods) {
 
-                //没有加RequestMapping注解的直接忽略
+                // 没有加RequestMapping注解的直接忽略
                 if (!method.isAnnotationPresent(MyRequestMapping.class)) {
                     continue;
                 }
 
-                //映射URL
+                // 映射URL
                 MyRequestMapping requestMapping = method.getAnnotation(MyRequestMapping.class);
                 String regex = ("/" + url + requestMapping.value()).replaceAll("/+", "/");
                 Pattern pattern = Pattern.compile(regex);
@@ -209,31 +254,29 @@ public class MyDispatcherServlet extends HttpServlet {
         }
     }
 
-    /**
-     * 匹配URL
-     *
+    /***
+     * 请求处理
+     * @author hujy
+     * @date 2019-09-16 15:11
      * @param req
      * @param resp
-     * @return
-     * @throws Exception
+     * @return void
      */
     private void doDispatch(HttpServletRequest req, HttpServletResponse resp) throws Exception {
-
         try {
-            Handler handler = getHandler(req);
+            Handler handler = checkUrl(req);
 
             if (handler == null) {
-                //如果没有匹配上，返回404错误
+                // 如果没有匹配上，返回404错误
                 resp.getWriter().write("404 Not Found");
                 return;
             }
 
-            //获取方法的参数列表
+            // 获取方法的参数列表
             Class<?>[] paramTypes = handler.method.getParameterTypes();
 
-            //保存所有需要自动赋值的参数值
+            // 保存所有需要自动赋值的参数值
             Object[] paramValues = new Object[paramTypes.length];
-
 
             Map<String, String[]> params = req.getParameterMap();
             for (Map.Entry<String, String[]> param : params.entrySet()) {
@@ -247,8 +290,7 @@ public class MyDispatcherServlet extends HttpServlet {
                 paramValues[index] = convert(paramTypes[index], value);
             }
 
-
-            //设置方法中的request和response对象
+            // 设置方法中的request和response对象
             int reqIndex = handler.paramIndexMapping.get(HttpServletRequest.class.getName());
             paramValues[reqIndex] = req;
             int respIndex = handler.paramIndexMapping.get(HttpServletResponse.class.getName());
@@ -261,7 +303,14 @@ public class MyDispatcherServlet extends HttpServlet {
         }
     }
 
-    private Handler getHandler(HttpServletRequest req) throws Exception {
+    /**
+     * URL校验
+     * @author hujy
+     * @date 2019-09-16 16:00
+     * @param req
+     * @return com.hujy.servlet.MyDispatcherServlet.Handler
+     */
+    private Handler checkUrl(HttpServletRequest req) throws Exception {
         if (handlerMapping.isEmpty()) {
             return null;
         }
@@ -273,11 +322,10 @@ public class MyDispatcherServlet extends HttpServlet {
         for (Handler handler : handlerMapping) {
             try {
                 Matcher matcher = handler.pattern.matcher(url);
-                //如果没有匹配上继续下一个匹配
+                // 如果没有匹配上继续下一个匹配
                 if (!matcher.matches()) {
                     continue;
                 }
-
                 return handler;
             } catch (Exception e) {
                 throw e;
@@ -286,48 +334,57 @@ public class MyDispatcherServlet extends HttpServlet {
         return null;
     }
 
-    //url传过来的参数都是String类型的，HTTP是基于字符串协议
-    //只需要把String转换为任意类型就好
+    /**
+     * 类型转换
+     * url传过来的参数都是String类型的，HTTP是基于字符串协议，只需要把String转换为任意类型就好
+     * @author hujy
+     * @date 2019-09-16 16:24
+     * @param type
+     * @param value
+     * @return java.lang.Object
+     */
     private Object convert(Class<?> type, String value) {
         if (Integer.class == type) {
             return Integer.valueOf(value);
         }
-        //如果还有double或者其他类型，继续加if
-        //这时候，我们应该想到策略模式了
-        //在这里暂时不实现，希望小伙伴自己来实现
+        // 如果还有double等其他类型，可以利用策略模式继续扩展
         return value;
     }
 
     /**
-     * Handler记录Controller中的RequestMapping和Method的对应关系
-     *
-     * @author Tom
-     * 内部类
+     * 请求处理内部类
+     * 记录Controller中的RequestMapping和Method的对应关系
+     * @author hujy
+     * @date 2019-09-16 14:50
      */
     private class Handler {
 
-        protected Object controller;    //保存方法对应的实例
-        protected Method method;        //保存映射的方法
-        protected Pattern pattern;
-        protected Map<String, Integer> paramIndexMapping;    //参数顺序
+        // 保存方法对应的实例
+        private Object controller;
+        // 保存映射的方法
+        private Method method;
+        // url匹配正则
+        private Pattern pattern;
+        // 保存参数顺序
+        private Map<String, Integer> paramIndexMapping;
 
-        /**
-         * 构造一个Handler基本的参数
-         *
-         * @param controller
-         * @param method
-         */
-        protected Handler(Pattern pattern, Object controller, Method method) {
+        private Handler(Pattern pattern, Object controller, Method method) {
             this.controller = controller;
             this.method = method;
             this.pattern = pattern;
-
-            paramIndexMapping = new HashMap<String, Integer>();
+            paramIndexMapping = new HashMap<>();
+            // url传过来的参数都是String类型的，HTTP是基于字符串协议，只需要把String转换为任意类型就好
             putParamIndexMapping(method);
         }
 
+        /**
+         * 保存参数在方法中的位置映射关系
+         * @author hujy
+         * @date 2019-09-16 16:02
+         * @param method
+         * @return void
+         */
         private void putParamIndexMapping(Method method) {
-
             //提取方法中加了注解的参数
             Annotation[][] pa = method.getParameterAnnotations();
             for (int i = 0; i < pa.length; i++) {
@@ -345,8 +402,7 @@ public class MyDispatcherServlet extends HttpServlet {
             Class<?>[] paramsTypes = method.getParameterTypes();
             for (int i = 0; i < paramsTypes.length; i++) {
                 Class<?> type = paramsTypes[i];
-                if (type == HttpServletRequest.class ||
-                        type == HttpServletResponse.class) {
+                if (type == HttpServletRequest.class || type == HttpServletResponse.class) {
                     paramIndexMapping.put(type.getName(), i);
                 }
             }

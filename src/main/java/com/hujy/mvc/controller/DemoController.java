@@ -1,10 +1,10 @@
-package com.hujy.controller;
+package com.hujy.mvc.controller;
 
 import com.hujy.annotation.MyAutowired;
 import com.hujy.annotation.MyController;
 import com.hujy.annotation.MyRequestMapping;
 import com.hujy.annotation.MyRequestParam;
-import com.hujy.service.DemoService;
+import com.hujy.mvc.service.DemoService;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
