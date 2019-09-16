@@ -127,7 +127,7 @@ public class MyDispatcherServlet extends HttpServlet {
                 Class<?> clazz = Class.forName(className);
                 if (clazz.isAnnotationPresent(MyController.class)) {
                     //默认将首字母小写作为beanName
-                    String beanName = loweredFirstChar(clazz.getSimpleName());
+                    String beanName = toLowerFirstCase(clazz.getSimpleName());
                     ioc.put(beanName, clazz.newInstance());
                 } else if (clazz.isAnnotationPresent(MyService.class)) {
 
@@ -161,7 +161,7 @@ public class MyDispatcherServlet extends HttpServlet {
      * @author hujy
      * @date 2019-09-16 14:08
      */
-    private String loweredFirstChar(String str) {
+    private String toLowerFirstCase(String str) {
         char[] chars = str.toCharArray();
         chars[0] += 32;
         return String.valueOf(chars);
